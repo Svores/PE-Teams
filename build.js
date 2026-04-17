@@ -1,260 +1,175 @@
-// build.js — fetches Confluence page (markdown format) and injects into index.html
+// build.js — fetches Confluence page in markdown and injects into index.html
 // Run: node build.js
-// Requires env vars: CONFLUENCE_EMAIL, CONFLUENCE_TOKEN
+// Requires: CONFLUENCE_EMAIL and CONFLUENCE_TOKEN env vars
 
 const https = require('https');
 const fs    = require('fs');
 const path  = require('path');
 
-const CONFLUENCE_BASE = 'thryv.atlassian.net';
-const PAGE_ID         = '4281368617';
-const EMAIL           = process.env.CONFLUENCE_EMAIL;
-const TOKEN           = process.env.CONFLUENCE_TOKEN;
+const HOST   = 'thryv.atlassian.net';
+const PAGE   = '4281368617';
+const EMAIL  = process.env.CONFLUENCE_EMAIL;
+const TOKEN  = process.env.CONFLUENCE_TOKEN;
 
 if (!EMAIL || !TOKEN) {
-  console.error('❌  Missing CONFLUENCE_EMAIL or CONFLUENCE_TOKEN');
+  console.error('❌  Set CONFLUENCE_EMAIL and CONFLUENCE_TOKEN');
   process.exit(1);
 }
 
 const AUTH = Buffer.from(`${EMAIL}:${TOKEN}`).toString('base64');
 
-function fetchPage() {
+function get(path) {
   return new Promise((resolve, reject) => {
-    // Use the v2 API with markdown body format
-    const opts = {
-      hostname: CONFLUENCE_BASE,
-      path: `/wiki/api/v2/pages/${PAGE_ID}?body-format=atlas_doc_format`,
-      headers: { Authorization: `Basic ${AUTH}`, Accept: 'application/json' },
-    };
-    https.get(opts, res => {
-      let raw = '';
-      res.on('data', c => raw += c);
-      res.on('end', () => {
-        if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode}: ${raw.slice(0,500)}`));
-        resolve(JSON.parse(raw));
-      });
-    }).on('error', reject);
+    const req = https.request(
+      { hostname: HOST, path, headers: { Authorization: `Basic ${AUTH}`, Accept: 'application/json' } },
+      res => {
+        const chunks = [];
+        res.on('data', c => chunks.push(c));
+        res.on('end', () => {
+          const body = Buffer.concat(chunks).toString();
+          if (res.statusCode < 200 || res.statusCode >= 300) {
+            return reject(new Error(`HTTP ${res.statusCode}: ${body.slice(0, 300)}`));
+          }
+          resolve(JSON.parse(body));
+        });
+      }
+    );
+    req.on('error', reject);
+    req.end();
   });
 }
 
-// Fetch page using v1 API with expand for body in export_view (closest to markdown)
-function fetchPageV1() {
-  return new Promise((resolve, reject) => {
-    const opts = {
-      hostname: CONFLUENCE_BASE,
-      path: `/wiki/rest/api/content/${PAGE_ID}?expand=body.export_view,version`,
-      headers: { Authorization: `Basic ${AUTH}`, Accept: 'application/json' },
-    };
-    https.get(opts, res => {
-      let raw = '';
-      res.on('data', c => raw += c);
-      res.on('end', () => {
-        if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode}: ${raw.slice(0,500)}`));
-        resolve(JSON.parse(raw));
-      });
-    }).on('error', reject);
-  });
-}
-
-// ── Strip HTML tags and decode entities ────────────────────────────────────
-function strip(s) {
-  return (s || '')
-    .replace(/<br\s*\/?>/gi, ' ')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&amp;/g,  '&')
-    .replace(/&lt;/g,   '<')
-    .replace(/&gt;/g,   '>')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&#39;/g,  "'")
-    .replace(/&quot;/g, '"')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-// ── Convert export_view HTML → markdown ───────────────────────────────────
-function htmlToMarkdown(html) {
-  let md = html;
-
-  // Headings
-  md = md.replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, (_, t) => `\n# ${strip(t)}\n`);
-  md = md.replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, (_, t) => `\n## ${strip(t)}\n`);
-  md = md.replace(/<h3[^>]*>([\s\S]*?)<\/h3>/gi, (_, t) => `\n### ${strip(t)}\n`);
-
-  // Bold
-  md = md.replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi, (_, t) => `**${strip(t)}**`);
-  md = md.replace(/<b[^>]*>([\s\S]*?)<\/b>/gi,           (_, t) => `**${strip(t)}**`);
-  md = md.replace(/<em[^>]*>([\s\S]*?)<\/em>/gi,         (_, t) => `_${strip(t)}_`);
-
-  // Info/note macros → redistribution marker
-  md = md.replace(/<div[^>]*class="[^"]*confluence-information-macro[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
-    '\n_**This team is being re-distributed**_\n');
-
-  // Tables — extract row by row
-  md = md.replace(/<table[\s\S]*?<\/table>/gi, tableHtml => {
-    const rows = [];
-    const trRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-    let trM;
-    while ((trM = trRe.exec(tableHtml)) !== null) {
-      const cells = [];
-      const tdRe = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
-      let tdM;
-      while ((tdM = tdRe.exec(trM[1])) !== null) {
-        cells.push(strip(tdM[1]));
-      }
-      if (cells.length) rows.push('| ' + cells.join(' | ') + ' |');
-    }
-    return '\n' + rows.join('\n') + '\n';
-  });
-
-  // Paragraphs / divs → newlines
-  md = md.replace(/<\/?(p|div|li|ul|ol)[^>]*>/gi, '\n');
-
-  // Strip remaining tags
-  md = md.replace(/<[^>]+>/g, '');
-
-  // Decode remaining entities
-  md = md
-    .replace(/&amp;/g,  '&')
-    .replace(/&lt;/g,   '<')
-    .replace(/&gt;/g,   '>')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&#39;/g,  "'")
-    .replace(/&quot;/g, '"');
-
-  // Clean up whitespace
-  return md.replace(/ {2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
-}
-
-// ── Parse markdown into GROUPS array ──────────────────────────────────────
-const GROUP_META = {
-  'Cohorts / Migration':  { color:'#185FA5', bgColor:'#ddeaf7' },
-  'Thryv 2.0':            { color:'#534AB7', bgColor:'#e8e7f8' },
-  'Thryv Leads':          { color:'#0F6E56', bgColor:'#d5ede5' },
-  'Social Ads':           { color:'#D85A30', bgColor:'#f5ddd3' },
-  'SEO':                  { color:'#993556', bgColor:'#f2d8e3' },
-  'Shared Services':      { color:'#BA7517', bgColor:'#f5e6c8' },
-  'DevSecOps':            { color:'#A32D2D', bgColor:'#f5d5d5' },
-  'Capture & Engage':     { color:'#3B6D11', bgColor:'#d8eac4', growOrg:true },
-  'Convert':              { color:'#5F5E5A', bgColor:'#e8e6e0', growOrg:true },
-  'Ecosystem & Platform': { color:'#993C1D', bgColor:'#f5ddd3', growOrg:true },
-};
-
-function parseMarkdown(md) {
-  const groups = [];
-  let grp = null, team = null, inMembers = false;
-
-  for (const rawLine of md.split('\n')) {
-    const line = rawLine.trim();
-    if (!line) { continue; }
-
-    // H2 → possible group
-    if (line.startsWith('## ')) {
-      const title = line.slice(3).trim();
-      if (GROUP_META[title]) {
-        grp = { name:title, ...GROUP_META[title], steeringPM:'—', steeringTech:'—', teams:[] };
-        groups.push(grp);
-        team = null; inMembers = false;
-      }
-      continue;
-    }
-
-    // H3 → team
-    if (line.startsWith('### ') && grp) {
-      team = { name: line.slice(4).trim(), members:[], redistributing:false };
-      grp.teams.push(team);
-      inMembers = false;
-      continue;
-    }
-
-    if (!team) continue;
-
-    // Redistribution flag
-    if (line.toLowerCase().includes('re-distribut')) {
-      team.redistributing = true; continue;
-    }
-
-    // Member section headers
-    if (line.includes('Team Members (FTE)') || line.startsWith('**Contractors')) {
-      inMembers = true; continue;
-    }
-
-    // Table rows
-    if (line.startsWith('|')) {
-      // Skip separator rows
-      if (line.includes('---')) continue;
-
-      const cells = line.split('|').slice(1,-1).map(c => c.trim());
-      if (cells.length < 1 || !cells[0]) continue;
-
-      const col0 = cells[0].replace(/\*\*/g,'').trim();
-      const col1 = (cells[1] || '').replace(/\*\*/g,'').trim();
-
-      if (!inMembers) {
-        // Role assignment rows
-        const role = col0.toLowerCase();
-        if (role === 'role' || role === 'name') continue; // header row
-        if (role.includes('product manager') && !role.includes('program')) team.pm = col1;
-        else if (role.includes('program manager'))  team.pgm = col1;
-        else if (role === 'engineering manager')     team.em = col1;
-        else if (role === 'engineering lead')        team.engLead = col1;
-        else if (role === 'tech lead')               team.techLead = col1;
-        else if (role.includes('design lead') || role === 'design') team.design = col1;
-        else if (role.includes('content design'))    team.content = col1;
-        else if (role.includes('ux research'))       team.ux = col1;
-        // Redistribution destination rows: col0=name, col1=destination
-        else if (team.redistributing && col0 && col1 && role !== 'name') {
-          team.members.push({ name: col0, title:'', ctrct:false, moved: col1 });
-        }
-      } else {
-        // Member rows
-        if (!col0 || col0.toLowerCase() === 'name') continue;
-        const isCtrct = col0.toUpperCase().includes('CTRCT');
-        const cleanName = col0.replace(/^CTRCT\s*[-–]\s*/i,'').trim();
-        if (cleanName) team.members.push({ name: cleanName, title: col1, ctrct: isCtrct });
-      }
-      continue;
-    }
-  }
-  return groups;
-}
-
-// ── Main ──────────────────────────────────────────────────────────────────
 async function main() {
-  console.log('🔄  Fetching Confluence page (export_view)…');
-  const page = await fetchPageV1();
+  console.log('🔄  Fetching from Confluence…');
 
-  const rawHtml   = page.body.export_view.value;
-  const markdown  = htmlToMarkdown(rawHtml);
-  const updatedAt = page.version.when;
-  const version   = page.version.number;
+  // Use the v2 API with "atlas_doc_format" to get structured content
+  // Then fall back to getting the body via the wiki REST API with body.atlas_doc_format
+  let markdown = '';
+  let updatedAt = new Date().toISOString();
+  let version = 0;
 
-  const groups = parseMarkdown(markdown);
-  const totalMembers = groups.reduce((a,g)=>a+g.teams.reduce((b,t)=>b+t.members.length,0),0);
+  try {
+    // Try the /wiki/rest/api endpoint with body.export_view
+    const data = await get(`/wiki/rest/api/content/${PAGE}?expand=body.atlas_doc_format,version`);
+    updatedAt = data.version.when;
+    version   = data.version.number;
 
-  console.log(`✅  v${version} | ${groups.length} groups | ${groups.reduce((a,g)=>a+g.teams.length,0)} teams | ${totalMembers} members`);
-
-  if (totalMembers === 0) {
-    console.warn('⚠️  0 members parsed — dumping markdown sample for debugging:');
-    console.log(markdown.slice(0, 4000));
+    // Walk the ADF document and extract text
+    markdown = adfToMarkdown(data.body.atlas_doc_format.value);
+    console.log(`✅  Got v${version}, updated ${updatedAt}`);
+  } catch (e) {
+    console.error('❌  Failed:', e.message);
+    process.exit(1);
   }
 
-  // Build output HTML
-  const tmpl = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
-  const injection = `window.__CONFLUENCE_DATA__ = ${JSON.stringify({
-    page: { body: markdown },
-    updatedAt,
-    version,
-  })};`;
+  // Count members as a sanity check
+  const memberCount = (markdown.match(/\*\*Team Members \(FTE\):\*\*/g) || []).length;
+  console.log(`📊  Found ${memberCount} team member sections in markdown`);
 
-  const out = tmpl.replace(
+  if (memberCount === 0) {
+    console.warn('⚠️  No member sections found — dumping first 2000 chars:');
+    console.log(markdown.slice(0, 2000));
+  }
+
+  // Build the output file
+  const tmpl = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+  const data = JSON.stringify({ page: { body: markdown }, updatedAt, version });
+  const out  = tmpl.replace(
     'const CONFLUENCE_DATA = window.__CONFLUENCE_DATA__ || null;',
-    injection + '\nconst CONFLUENCE_DATA = window.__CONFLUENCE_DATA__ || null;'
+    `window.__CONFLUENCE_DATA__ = ${data};\nconst CONFLUENCE_DATA = window.__CONFLUENCE_DATA__ || null;`
   );
 
-  const outDir = path.join(__dirname, 'docs');
-  fs.mkdirSync(outDir, { recursive: true });
-  fs.writeFileSync(path.join(outDir, 'index.html'), out, 'utf8');
-  console.log(`📄  Written → docs/index.html`);
+  fs.mkdirSync(path.join(__dirname, 'docs'), { recursive: true });
+  fs.writeFileSync(path.join(__dirname, 'docs', 'index.html'), out);
+  console.log('📄  Written to docs/index.html');
 }
 
-main().catch(err => { console.error('❌', err.message); process.exit(1); });
+// ── ADF (Atlassian Document Format) → Markdown ────────────────────────────
+// ADF is a JSON tree. We walk it and emit markdown.
+function adfToMarkdown(adfJson) {
+  let doc;
+  try {
+    doc = typeof adfJson === 'string' ? JSON.parse(adfJson) : adfJson;
+  } catch {
+    return '';
+  }
+
+  const lines = [];
+
+  function nodeText(node) {
+    if (!node) return '';
+    if (node.type === 'text') {
+      let t = node.text || '';
+      if (node.marks) {
+        for (const m of node.marks) {
+          if (m.type === 'strong') t = `**${t}**`;
+          if (m.type === 'em')     t = `_${t}_`;
+        }
+      }
+      return t;
+    }
+    return (node.content || []).map(nodeText).join('');
+  }
+
+  function walkNode(node, depth) {
+    if (!node) return;
+    const t = node.type;
+
+    if (t === 'heading') {
+      const lvl = node.attrs?.level || 2;
+      const text = (node.content || []).map(nodeText).join('');
+      lines.push(`${'#'.repeat(lvl)} ${text}`);
+      return;
+    }
+
+    if (t === 'paragraph') {
+      const text = (node.content || []).map(nodeText).join('');
+      if (text.trim()) lines.push(text);
+      return;
+    }
+
+    if (t === 'table') {
+      const rows = (node.content || []).filter(n => n.type === 'tableRow');
+      for (const row of rows) {
+        const cells = (row.content || []).map(cell => {
+          return (cell.content || []).map(p => (p.content || []).map(nodeText).join('')).join(' ').trim();
+        });
+        lines.push('| ' + cells.join(' | ') + ' |');
+      }
+      lines.push('');
+      return;
+    }
+
+    if (t === 'bulletList' || t === 'orderedList') {
+      for (const item of (node.content || [])) {
+        const text = (item.content || []).map(p => (p.content || []).map(nodeText).join('')).join(' ').trim();
+        lines.push(`- ${text}`);
+      }
+      return;
+    }
+
+    if (t === 'rule') { lines.push('---'); return; }
+
+    if (t === 'panel' || t === 'blockquote') {
+      // Info panels are used for "being redistributed" notices
+      const text = (node.content || []).map(n => (n.content||[]).map(nodeText).join('')).join(' ');
+      if (text.toLowerCase().includes('distribut')) {
+        lines.push('_**This team is being re-distributed**_');
+      }
+      return;
+    }
+
+    // Default: recurse into children
+    for (const child of (node.content || [])) {
+      walkNode(child, depth + 1);
+    }
+  }
+
+  for (const node of (doc.content || [])) {
+    walkNode(node, 0);
+  }
+
+  return lines.join('\n');
+}
+
+main().catch(e => { console.error('❌', e.message); process.exit(1); });
