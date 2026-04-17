@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PE Scrum Team Assignments</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #ffffff; --bg-secondary: #f5f5f4; --text-primary: #1c1c1b;
+  --text-secondary: #6b6b68; --text-tertiary: #9b9b97;
+  --border: rgba(0,0,0,0.1); --border-hover: rgba(0,0,0,0.2);
+  --radius-md: 8px; --radius-lg: 12px; --font: system-ui, -apple-system, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #1c1c1b; --bg-secondary: #2a2a28; --text-primary: #f0ede8;
+    --text-secondary: #a0a09b; --text-tertiary: #6b6b68;
+    --border: rgba(255,255,255,0.1); --border-hover: rgba(255,255,255,0.2); }
+}
+body { font-family: var(--font); background: var(--bg); color: var(--text-primary); padding: 2rem 1.5rem; min-height: 100vh; }
+h1 { font-size: 20px; font-weight: 500; margin-bottom: 0.25rem; }
+.subtitle { font-size: 13px; color: var(--text-secondary); margin-bottom: 1.5rem; }
+.loading { text-align: center; padding: 4rem 2rem; color: var(--text-secondary); font-size: 14px; }
+.error { text-align: center; padding: 2rem; background: #fee2e2; border-radius: var(--radius-md); color: #991b1b; font-size: 13px; margin: 1rem 0; }
+.top-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 1rem; flex-wrap: wrap; }
+.search-box { flex: 1; min-width: 200px; }
+.search-box input { width: 100%; padding: 7px 12px; font-size: 13px; border: 0.5px solid var(--border-hover); border-radius: var(--radius-md); background: var(--bg); color: var(--text-primary); outline: none; }
+.search-box input:focus { border-color: #888; }
+.filter-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 1.25rem; }
+.pill { font-size: 12px; padding: 4px 10px; border-radius: 20px; cursor: pointer; border: 0.5px solid var(--border-hover); background: var(--bg-secondary); color: var(--text-secondary); transition: all 0.15s; white-space: nowrap; user-select: none; }
+.pill.active { border-color: transparent; }
+.pill[data-group="all"].active { background: #888780; color: #F1EFE8; }
+.pill[data-group="Cohorts / Migration"].active { background: #185FA5; color: #E6F1FB; }
+.pill[data-group="Thryv 2.0"].active { background: #534AB7; color: #EEEDFE; }
+.pill[data-group="Thryv Leads"].active { background: #0F6E56; color: #E1F5EE; }
+.pill[data-group="Social Ads"].active { background: #D85A30; color: #FAECE7; }
+.pill[data-group="SEO"].active { background: #993556; color: #FBEAF0; }
+.pill[data-group="Shared Services"].active { background: #BA7517; color: #FAEEDA; }
+.pill[data-group="DevSecOps"].active { background: #A32D2D; color: #FCEBEB; }
+.pill[data-group="Capture & Engage"].active { background: #3B6D11; color: #EAF3DE; }
+.pill[data-group="Convert"].active { background: #5F5E5A; color: #F1EFE8; }
+.pill[data-group="Ecosystem & Platform"].active { background: #993C1D; color: #FAECE7; }
+.stats-row { display: flex; gap: 10px; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.stat-card { background: var(--bg-secondary); border-radius: var(--radius-md); padding: 10px 16px; min-width: 90px; text-align: center; }
+.stat-label { font-size: 11px; color: var(--text-secondary); margin-bottom: 2px; }
+.stat-val { font-size: 20px; font-weight: 500; }
+.pl-group { margin-bottom: 2rem; }
+.pl-header { display: flex; align-items: center; gap: 10px; margin-bottom: 0.75rem; padding: 8px 12px; border-radius: var(--radius-md); flex-wrap: wrap; }
+.pl-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.pl-title { font-size: 15px; font-weight: 500; }
+.pl-pm { font-size: 11px; opacity: 0.8; }
+.pl-meta { font-size: 12px; color: var(--text-secondary); margin-left: auto; }
+.grow-label { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border-radius: 8px; background: #d8eac4; color: #3B6D11; flex-shrink: 0; }
+.redistributing-badge { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 8px; background: #fee2e2; color: #991b1b; flex-shrink: 0; }
+.teams-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.team-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 12px 14px; cursor: pointer; transition: border-color 0.15s; }
+.team-card:hover { border-color: var(--border-hover); }
+.team-card.redistributing { border-color: #fca5a5; background: #fff5f5; }
+@media (prefers-color-scheme: dark) { .team-card.redistributing { border-color: #7f1d1d; background: #1c0a0a; } }
+.team-name { font-size: 13px; font-weight: 500; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.team-roles { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.role-badge { font-size: 11px; padding: 2px 7px; border-radius: 10px; background: var(--bg-secondary); color: var(--text-secondary); white-space: nowrap; }
+.role-badge.pgm { background: #eef2ff; color: #4338ca; }
+.role-badge.em  { background: #fefce8; color: #854d0e; }
+.role-badge.el  { background: #fff7ed; color: #c2410c; }
+.role-badge.tl  { background: #fff7ed; color: #c2410c; }
+.role-badge.design   { background: #fdf4ff; color: #7e22ce; }
+.role-badge.research { background: #f0fdf4; color: #166534; }
+@media (prefers-color-scheme: dark) {
+  .role-badge.pgm { background: #1e1b4b; color: #a5b4fc; }
+  .role-badge.em  { background: #422006; color: #fde68a; }
+  .role-badge.el  { background: #431407; color: #fdba74; }
+  .role-badge.tl  { background: #431407; color: #fdba74; }
+  .role-badge.design   { background: #2e1065; color: #d8b4fe; }
+  .role-badge.research { background: #052e16; color: #86efac; }
+  .grow-label { background: #1a3a08; color: #86efac; }
+}
+.team-count { font-size: 11px; color: var(--text-tertiary); }
+.expand-hint { font-size: 11px; color: var(--text-tertiary); margin-top: 6px; }
+.members-section { margin-top: 10px; border-top: 0.5px solid var(--border); padding-top: 8px; display: none; }
+.team-card.expanded .members-section { display: block; }
+.member-row { font-size: 12px; color: var(--text-secondary); padding: 2px 0; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.member-name { color: var(--text-primary); font-weight: 500; }
+.member-title { font-size: 11px; }
+.member-moved { font-size: 10px; padding: 1px 5px; border-radius: 8px; background: #dbeafe; color: #1d4ed8; flex-shrink: 0; }
+.contractor-tag { font-size: 10px; padding: 1px 5px; border-radius: 8px; background: #FAEEDA; color: #854F0B; flex-shrink: 0; }
+.no-results { text-align: center; padding: 2rem; color: var(--text-tertiary); font-size: 14px; }
+</style>
+</head>
+<body>
+<h1>PE Scrum Team Assignments</h1>
+<p class="subtitle" id="subtitle">Loading from Confluence…</p>
+<div id="app-loading" class="loading">⏳ Fetching latest data from Confluence…</div>
+<div id="app" style="display:none">
+  <div class="top-bar">
+    <div class="search-box"><input type="text" id="search" placeholder="Search by name, role, or team…" /></div>
+  </div>
+  <div class="filter-pills" id="filters"></div>
+  <div class="stats-row" id="stats"></div>
+  <div id="roster"></div>
+</div>
+
+<script>
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
+// These are injected by the GitHub Actions build step (see build.js).
+// If running locally, set CONFLUENCE_TOKEN and CONFLUENCE_EMAIL as env vars
+// and run `node build.js` to regenerate this file.
+const CONFLUENCE_DATA = window.__CONFLUENCE_DATA__ || null;
+// ─────────────────────────────────────────────────────────────────────────────
+
+const GROUP_META = {
+  "Cohorts / Migration": { color:"#185FA5", bgColor:"#ddeaf7" },
+  "Thryv 2.0":           { color:"#534AB7", bgColor:"#e8e7f8" },
+  "Thryv Leads":         { color:"#0F6E56", bgColor:"#d5ede5" },
+  "Social Ads":          { color:"#D85A30", bgColor:"#f5ddd3" },
+  "SEO":                 { color:"#993556", bgColor:"#f2d8e3" },
+  "Shared Services":     { color:"#BA7517", bgColor:"#f5e6c8" },
+  "DevSecOps":           { color:"#A32D2D", bgColor:"#f5d5d5" },
+  "Capture & Engage":    { color:"#3B6D11", bgColor:"#d8eac4", growOrg:true },
+  "Convert":             { color:"#5F5E5A", bgColor:"#e8e6e0", growOrg:true },
+  "Ecosystem & Platform":{ color:"#993C1D", bgColor:"#f5ddd3", growOrg:true },
+};
+
+let GROUPS = [], activeGroup = 'all', searchTerm = '';
+
+// ── Parser: converts Confluence markdown into GROUPS array ───────────────────
+function parseConfluenceMarkdown(md) {
+  const lines = md.split('\n');
+  const groups = [];
+  let currentGroup = null, currentTeam = null, inFteTable = false, inMoveTable = false;
+
+  // helpers
+  const parseTableRow = l => l.split('|').slice(1,-1).map(c => c.trim());
+  const isTableRow = l => l.trim().startsWith('|') && !l.includes('---');
+  const isSeparator = l => /^\|[\s|:-]+\|$/.test(l.trim());
+
+  const GROUP_NAMES = Object.keys(GROUP_META);
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // H2 = group or team section
+    if (trimmed.startsWith('## ')) {
+      const title = trimmed.slice(3).trim();
+      if (GROUP_NAMES.includes(title)) {
+        currentGroup = { name: title, ...GROUP_META[title], steeringPM:'—', steeringTech:'—', teams:[] };
+        groups.push(currentGroup);
+        currentTeam = null; inFteTable = false; inMoveTable = false;
+      }
+      continue;
+    }
+
+    // Steering line
+    if (trimmed.startsWith('**Steering PM:**') && currentGroup) {
+      const pm = (trimmed.match(/\*\*Steering PM:\*\*\s*([^|]+)/)||[])[1]||'';
+      const tech = (trimmed.match(/\*\*Steering Tech Lead:\*\*[^_]*_([^_]+)_/)||trimmed.match(/\*\*Steering Tech Lead:\*\*\s*(.+)/)||[])[1]||'';
+      currentGroup.steeringPM = pm.trim(); currentGroup.steeringTech = tech.trim();
+      continue;
+    }
+
+    // H3 = team
+    if (trimmed.startsWith('### ') && currentGroup) {
+      const tName = trimmed.slice(4).trim();
+      currentTeam = { name: tName, members:[], redistributing: false };
+      currentGroup.teams.push(currentTeam);
+      inFteTable = false; inMoveTable = false;
+      continue;
+    }
+
+    // Re-distributing flag
+    if (trimmed.includes('being re-distributed') && currentTeam) {
+      currentTeam.redistributing = true; continue;
+    }
+
+    // Role table rows (before FTE section)
+    if (!inFteTable && !inMoveTable && isTableRow(trimmed) && !isSeparator(trimmed) && currentTeam) {
+      const [role, name] = parseTableRow(trimmed);
+      if (!role || !name) continue;
+      const r = role.toLowerCase();
+      if (r.includes('product manager') && !r.includes('program')) currentTeam.pm = name;
+      else if (r.includes('program manager')) currentTeam.pgm = name;
+      else if (r === 'engineering manager') currentTeam.em = name;
+      else if (r === 'engineering lead') currentTeam.engLead = name;
+      else if (r === 'tech lead') currentTeam.techLead = name;
+      else if (r.includes('design lead') || r === 'design') currentTeam.design = name;
+      else if (r.includes('content design')) currentTeam.content = name;
+      else if (r.includes('ux research')) currentTeam.ux = name;
+      continue;
+    }
+
+    // FTE section header
+    if (trimmed === '**Team Members (FTE):**') { inFteTable = true; inMoveTable = false; continue; }
+    if (trimmed === '**Contractors:**') { inFteTable = true; inMoveTable = false; continue; }
+
+    // Move table detection (Prod Defects style)
+    if (trimmed.startsWith('| **Name**') || trimmed.startsWith('| Name') && trimmed.includes('Moved')) {
+      inFteTable = false; inMoveTable = true; continue;
+    }
+
+    // FTE member rows
+    if (inFteTable && isTableRow(trimmed) && !isSeparator(trimmed) && currentTeam) {
+      const cols = parseTableRow(trimmed);
+      const name = cols[0]?.replace(/^CTRCT\s*-\s*/,'').trim();
+      const title = cols[1]||'';
+      if (name) {
+        const ctrct = trimmed.includes('CTRCT');
+        currentTeam.members.push({ name, title, ctrct });
+      }
+      continue;
+    }
+
+    // Move table rows
+    if (inMoveTable && isTableRow(trimmed) && !isSeparator(trimmed) && currentTeam) {
+      const cols = parseTableRow(trimmed);
+      const name = cols[0]?.replace(/^\*\*/g,'').replace(/\*\*$/g,'').trim();
+      const moved = cols[1]?.trim()||'';
+      if (name && name !== 'Name') {
+        currentTeam.members.push({ name, title:'', ctrct:false, moved });
+      }
+      continue;
+    }
+  }
+  return groups;
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function countMembers(g) { return g.teams.reduce((a,t)=>a+t.members.length,0); }
+function trunc(s,n=20) { return s&&s.length>n?s.slice(0,n-1)+'…':s; }
+
+function renderFilters() {
+  const el = document.getElementById('filters');
+  let html = `<span class="pill ${activeGroup==='all'?'active':''}" data-group="all">All (${GROUPS.length} groups)</span>`;
+  GROUPS.forEach(g => {
+    html += `<span class="pill ${activeGroup===g.name?'active':''}" data-group="${g.name}" style="${activeGroup===g.name?'':'border-left:3px solid '+g.color}">${g.name}</span>`;
+  });
+  el.innerHTML = html;
+  el.querySelectorAll('.pill').forEach(p=>p.addEventListener('click',()=>{ activeGroup=p.dataset.group; render(); }));
+}
+
+function renderStats() {
+  const groups = activeGroup==='all'?GROUPS:GROUPS.filter(g=>g.name===activeGroup);
+  const total = groups.reduce((a,g)=>a+countMembers(g),0);
+  const teams = groups.reduce((a,g)=>a+g.teams.length,0);
+  const ctrct = groups.reduce((a,g)=>a+g.teams.reduce((b,t)=>b+t.members.filter(m=>m.ctrct).length,0),0);
+  document.getElementById('stats').innerHTML = `
+    <div class="stat-card"><div class="stat-label">groups</div><div class="stat-val">${activeGroup==='all'?GROUPS.length:1}</div></div>
+    <div class="stat-card"><div class="stat-label">scrum teams</div><div class="stat-val">${teams}</div></div>
+    <div class="stat-card"><div class="stat-label">total people</div><div class="stat-val">${total}</div></div>
+    <div class="stat-card"><div class="stat-label">contractors</div><div class="stat-val">${ctrct}</div></div>`;
+}
+
+function matches(group, team, member) {
+  if (!searchTerm) return true;
+  const q = searchTerm.toLowerCase();
+  return [member.name, member.title||'', team.name, team.pm||'', team.pgm||'',
+    team.em||'', team.techLead||'', team.engLead||'', team.design||'', group.name]
+    .some(s=>s.toLowerCase().includes(q));
+}
+
+function renderRoster() {
+  const groups = activeGroup==='all'?GROUPS:GROUPS.filter(g=>g.name===activeGroup);
+  let html = '', any = false;
+  groups.forEach(group => {
+    const teams = group.teams.map(t=>({...t,
+      matchingMembers: searchTerm?t.members.filter(m=>matches(group,t,m)):t.members
+    })).filter(t=>!searchTerm||t.matchingMembers.length>0);
+    if (!teams.length && searchTerm) return;
+    any = true;
+    html += `<div class="pl-group"><div class="pl-header" style="background:${group.bgColor};border-left:3px solid ${group.color}">
+      <div class="pl-dot" style="background:${group.color}"></div>
+      <span class="pl-title" style="color:${group.color}">${group.name}</span>
+      ${group.growOrg?'<span class="grow-label">Grow Org</span>':''}
+      ${group.steeringPM&&group.steeringPM!=='—'?`<span class="pl-pm" style="color:${group.color}">PM: ${group.steeringPM}</span>`:''}
+      <span class="pl-meta">${group.teams.length} teams · ${countMembers(group)} people</span>
+    </div><div class="teams-grid">`;
+    teams.forEach((team,ti)=>{
+      const fte=team.members.filter(m=>!m.ctrct).length, ctr=team.members.filter(m=>m.ctrct).length;
+      html += `<div class="team-card${team.redistributing?' redistributing':''}" data-idx="${ti}">
+        <div class="team-name">${team.name}${team.redistributing?'<span class="redistributing-badge">Re-distributing</span>':''}</div>
+        <div class="team-roles">
+          ${team.pm&&team.pm!=='—'?`<span class="role-badge">PM: ${trunc(team.pm)}</span>`:''}
+          ${team.pgm&&team.pgm!=='TBH'?`<span class="role-badge pgm">PgM: ${trunc(team.pgm)}</span>`:''}
+          ${team.em&&team.em!=='—'?`<span class="role-badge em">EM: ${trunc(team.em)}</span>`:''}
+          ${team.engLead?`<span class="role-badge el">EL: ${trunc(team.engLead)}</span>`:''}
+          ${team.techLead?`<span class="role-badge tl">TL: ${trunc(team.techLead)}</span>`:''}
+          ${team.design&&team.design!=='—'&&team.design!=='N/A'?`<span class="role-badge design">Design: ${trunc(team.design)}</span>`:''}
+          ${team.content?`<span class="role-badge design">Content: ${trunc(team.content)}</span>`:''}
+          ${team.ux?`<span class="role-badge research">UX: ${trunc(team.ux)}</span>`:''}
+        </div>
+        <div class="team-count">${team.redistributing?'Being redistributed':fte+' FTE'+(ctr>0?' · '+ctr+' contractor'+(ctr>1?'s':''):'')}</div>
+        <div class="expand-hint">click to see members</div>
+        <div class="members-section">
+          ${(searchTerm?team.matchingMembers:team.members).map(m=>`
+            <div class="member-row">
+              <span class="member-name">${m.name}</span>
+              ${m.ctrct?'<span class="contractor-tag">CTRCT</span>':''}
+              ${m.moved?`<span class="member-moved">→ ${m.moved}</span>`:''}
+              ${m.title&&!m.moved?`<span class="member-title">${m.title}</span>`:''}
+            </div>`).join('')}
+        </div>
+      </div>`;
+    });
+    html += `</div></div>`;
+  });
+  document.getElementById('roster').innerHTML = any?html:`<div class="no-results">No results for "${searchTerm}"</div>`;
+  document.querySelectorAll('.team-card').forEach(c=>{
+    c.addEventListener('click',()=>{
+      c.classList.toggle('expanded');
+      c.querySelector('.expand-hint').textContent=c.classList.contains('expanded')?'click to collapse':'click to see members';
+    });
+  });
+  if (searchTerm) document.querySelectorAll('.team-card').forEach(c=>c.classList.add('expanded'));
+}
+
+function render() { renderFilters(); renderStats(); renderRoster(); }
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+function boot(data, updatedAt) {
+  GROUPS = parseConfluenceMarkdown(data.body);
+  const date = new Date(updatedAt);
+  document.getElementById('subtitle').textContent =
+    `Source: Confluence · Last updated ${date.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})} at ${date.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`;
+  document.getElementById('app-loading').style.display = 'none';
+  document.getElementById('app').style.display = '';
+  document.getElementById('search').addEventListener('input', e=>{ searchTerm=e.target.value.trim(); render(); });
+  render();
+}
+
+// Use pre-built data injected at build time
+if (CONFLUENCE_DATA) {
+  boot(CONFLUENCE_DATA.page, CONFLUENCE_DATA.updatedAt);
+} else {
+  document.getElementById('app-loading').textContent = '⚠️ No data found. Run the build script to generate this page.';
+}
+</script>
+</body>
+</html>
