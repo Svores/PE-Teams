@@ -1,175 +1,123 @@
-// build.js — fetches Confluence page in markdown and injects into index.html
-// Run: node build.js
-// Requires: CONFLUENCE_EMAIL and CONFLUENCE_TOKEN env vars
+name: Refresh PE Teams Page
 
-const https = require('https');
-const fs    = require('fs');
-const path  = require('path');
+on:
+  schedule:
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
 
-const HOST   = 'thryv.atlassian.net';
-const PAGE   = '4281368617';
-const EMAIL  = process.env.CONFLUENCE_EMAIL;
-const TOKEN  = process.env.CONFLUENCE_TOKEN;
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
-if (!EMAIL || !TOKEN) {
-  console.error('❌  Set CONFLUENCE_EMAIL and CONFLUENCE_TOKEN');
-  process.exit(1);
-}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-const AUTH = Buffer.from(`${EMAIL}:${TOKEN}`).toString('base64');
+      - name: Fetch Confluence page (markdown format)
+        env:
+          CONFLUENCE_EMAIL: ${{ secrets.CONFLUENCE_EMAIL }}
+          CONFLUENCE_TOKEN: ${{ secrets.CONFLUENCE_TOKEN }}
+        run: |
+          # Fetch the page using the Confluence REST API with markdown body format
+          curl -s \
+            -u "$CONFLUENCE_EMAIL:$CONFLUENCE_TOKEN" \
+            -H "Accept: application/json" \
+            "https://thryv.atlassian.net/wiki/api/v2/pages/4281368617?body-format=atlas_doc_format" \
+            -o raw_page.json
 
-function get(path) {
-  return new Promise((resolve, reject) => {
-    const req = https.request(
-      { hostname: HOST, path, headers: { Authorization: `Basic ${AUTH}`, Accept: 'application/json' } },
-      res => {
-        const chunks = [];
-        res.on('data', c => chunks.push(c));
-        res.on('end', () => {
-          const body = Buffer.concat(chunks).toString();
-          if (res.statusCode < 200 || res.statusCode >= 300) {
-            return reject(new Error(`HTTP ${res.statusCode}: ${body.slice(0, 300)}`));
-          }
-          resolve(JSON.parse(body));
-        });
-      }
-    );
-    req.on('error', reject);
-    req.end();
-  });
-}
+          # Extract version and timestamp using node
+          node -e "
+            const raw = JSON.parse(require('fs').readFileSync('raw_page.json','utf8'));
+            console.log('Page version:', raw.version?.number || 'unknown');
+            console.log('Status:', raw.status || 'unknown');
+          "
 
-async function main() {
-  console.log('🔄  Fetching from Confluence…');
+          # Now fetch with markdown body format (different endpoint)
+          curl -s \
+            -u "$CONFLUENCE_EMAIL:$CONFLUENCE_TOKEN" \
+            -H "Accept: application/json" \
+            "https://thryv.atlassian.net/wiki/rest/api/content/4281368617?expand=body.export_view,version" \
+            -o page_export.json
 
-  // Use the v2 API with "atlas_doc_format" to get structured content
-  // Then fall back to getting the body via the wiki REST API with body.atlas_doc_format
-  let markdown = '';
-  let updatedAt = new Date().toISOString();
-  let version = 0;
+          # Build data.json using node
+          node -e "
+            const fs = require('fs');
+            const page = JSON.parse(fs.readFileSync('page_export.json','utf8'));
+            
+            if (!page.body) {
+              console.error('No body found in response');
+              console.error(JSON.stringify(page).slice(0,500));
+              process.exit(1);
+            }
 
-  try {
-    // Try the /wiki/rest/api endpoint with body.export_view
-    const data = await get(`/wiki/rest/api/content/${PAGE}?expand=body.atlas_doc_format,version`);
-    updatedAt = data.version.when;
-    version   = data.version.number;
+            // Convert export_view HTML to markdown-like text
+            let html = page.body.export_view.value;
 
-    // Walk the ADF document and extract text
-    markdown = adfToMarkdown(data.body.atlas_doc_format.value);
-    console.log(`✅  Got v${version}, updated ${updatedAt}`);
-  } catch (e) {
-    console.error('❌  Failed:', e.message);
-    process.exit(1);
-  }
+            // Headings
+            html = html.replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, (_, t) => '\n## ' + t.replace(/<[^>]+>/g,'').trim() + '\n');
+            html = html.replace(/<h3[^>]*>([\s\S]*?)<\/h3>/gi, (_, t) => '\n### ' + t.replace(/<[^>]+>/g,'').trim() + '\n');
+            html = html.replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi, (_, t) => '**' + t.replace(/<[^>]+>/g,'').trim() + '**');
 
-  // Count members as a sanity check
-  const memberCount = (markdown.match(/\*\*Team Members \(FTE\):\*\*/g) || []).length;
-  console.log(`📊  Found ${memberCount} team member sections in markdown`);
+            // Info panels = redistribution notice
+            html = html.replace(/<div[^>]*class=\"[^\"]*information-macro[^\"]*\"[^>]*>[\s\S]*?<\/div>/gi,
+              '\n_**This team is being re-distributed**_\n');
 
-  if (memberCount === 0) {
-    console.warn('⚠️  No member sections found — dumping first 2000 chars:');
-    console.log(markdown.slice(0, 2000));
-  }
+            // Tables
+            html = html.replace(/<table[\s\S]*?<\/table>/gi, tableHtml => {
+              const rows = [];
+              const trRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+              let trM;
+              while ((trM = trRe.exec(tableHtml)) !== null) {
+                const cells = [];
+                const tdRe = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
+                let tdM;
+                while ((tdM = tdRe.exec(trM[1])) !== null) {
+                  cells.push(tdM[1].replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&nbsp;/g,' ').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&#39;/g,\"'\").trim());
+                }
+                if (cells.length) rows.push('| ' + cells.join(' | ') + ' |');
+              }
+              return '\n' + rows.join('\n') + '\n';
+            });
 
-  // Build the output file
-  const tmpl = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
-  const data = JSON.stringify({ page: { body: markdown }, updatedAt, version });
-  const out  = tmpl.replace(
-    'const CONFLUENCE_DATA = window.__CONFLUENCE_DATA__ || null;',
-    `window.__CONFLUENCE_DATA__ = ${data};\nconst CONFLUENCE_DATA = window.__CONFLUENCE_DATA__ || null;`
-  );
+            // Team member headers
+            html = html.replace(/<p[^>]*><strong>Team Members \(FTE\):<\/strong><\/p>/gi, '\n**Team Members (FTE):**\n');
+            html = html.replace(/<p[^>]*><strong>Contractors:<\/strong><\/p>/gi, '\n**Contractors:**\n');
 
-  fs.mkdirSync(path.join(__dirname, 'docs'), { recursive: true });
-  fs.writeFileSync(path.join(__dirname, 'docs', 'index.html'), out);
-  console.log('📄  Written to docs/index.html');
-}
+            // Strip remaining tags
+            html = html.replace(/<[^>]+>/g, ' ')
+                       .replace(/&amp;/g,'&').replace(/&nbsp;/g,' ').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&#39;/g,\"'\").replace(/&quot;/g,'\"')
+                       .replace(/ {2,}/g,' ').replace(/\n{3,}/g,'\n\n').trim();
 
-// ── ADF (Atlassian Document Format) → Markdown ────────────────────────────
-// ADF is a JSON tree. We walk it and emit markdown.
-function adfToMarkdown(adfJson) {
-  let doc;
-  try {
-    doc = typeof adfJson === 'string' ? JSON.parse(adfJson) : adfJson;
-  } catch {
-    return '';
-  }
+            const output = {
+              page: { body: html },
+              updatedAt: page.version.when,
+              version: page.version.number
+            };
 
-  const lines = [];
+            fs.writeFileSync('data.json', JSON.stringify(output));
+            console.log('✅ data.json written, version', page.version.number);
 
-  function nodeText(node) {
-    if (!node) return '';
-    if (node.type === 'text') {
-      let t = node.text || '';
-      if (node.marks) {
-        for (const m of node.marks) {
-          if (m.type === 'strong') t = `**${t}**`;
-          if (m.type === 'em')     t = `_${t}_`;
-        }
-      }
-      return t;
-    }
-    return (node.content || []).map(nodeText).join('');
-  }
+            // Sanity check
+            const memberSections = (html.match(/\*\*Team Members/g) || []).length;
+            console.log('📊 Team member sections found:', memberSections);
+            if (memberSections === 0) {
+              console.log('⚠️  Sample of converted text:');
+              console.log(html.slice(0, 1000));
+            }
+          "
 
-  function walkNode(node, depth) {
-    if (!node) return;
-    const t = node.type;
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-    if (t === 'heading') {
-      const lvl = node.attrs?.level || 2;
-      const text = (node.content || []).map(nodeText).join('');
-      lines.push(`${'#'.repeat(lvl)} ${text}`);
-      return;
-    }
+      - name: Build HTML
+        run: node build.js
 
-    if (t === 'paragraph') {
-      const text = (node.content || []).map(nodeText).join('');
-      if (text.trim()) lines.push(text);
-      return;
-    }
-
-    if (t === 'table') {
-      const rows = (node.content || []).filter(n => n.type === 'tableRow');
-      for (const row of rows) {
-        const cells = (row.content || []).map(cell => {
-          return (cell.content || []).map(p => (p.content || []).map(nodeText).join('')).join(' ').trim();
-        });
-        lines.push('| ' + cells.join(' | ') + ' |');
-      }
-      lines.push('');
-      return;
-    }
-
-    if (t === 'bulletList' || t === 'orderedList') {
-      for (const item of (node.content || [])) {
-        const text = (item.content || []).map(p => (p.content || []).map(nodeText).join('')).join(' ').trim();
-        lines.push(`- ${text}`);
-      }
-      return;
-    }
-
-    if (t === 'rule') { lines.push('---'); return; }
-
-    if (t === 'panel' || t === 'blockquote') {
-      // Info panels are used for "being redistributed" notices
-      const text = (node.content || []).map(n => (n.content||[]).map(nodeText).join('')).join(' ');
-      if (text.toLowerCase().includes('distribut')) {
-        lines.push('_**This team is being re-distributed**_');
-      }
-      return;
-    }
-
-    // Default: recurse into children
-    for (const child of (node.content || [])) {
-      walkNode(child, depth + 1);
-    }
-  }
-
-  for (const node of (doc.content || [])) {
-    walkNode(node, 0);
-  }
-
-  return lines.join('\n');
-}
-
-main().catch(e => { console.error('❌', e.message); process.exit(1); });
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs
