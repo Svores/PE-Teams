@@ -44,7 +44,7 @@ function clean(s) {
     .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&#39;/g,"'").replace(/&quot;/g,'"').replace(/\s+/g,' ').trim();
 }
 
-// ── Parse HTML table → array of {role, name, title} rows ──────────────────
+// ── Parse HTML table → array of rows ──────────────────────────────────────
 function parseTable(html) {
   const rows = [];
   const trRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
@@ -69,6 +69,7 @@ const GROUP_META = {
   'Social Ads':           { color:'#D85A30', bgColor:'#f5ddd3' },
   'SEO':                  { color:'#993556', bgColor:'#f2d8e3' },
   'Shared Services':      { color:'#BA7517', bgColor:'#f5e6c8' },
+  'Thryv Catalyst':       { color:'#7C3AED', bgColor:'#ede9fe' },
   'DevSecOps':            { color:'#A32D2D', bgColor:'#f5d5d5' },
   'Capture & Engage':     { color:'#3B6D11', bgColor:'#d8eac4', growOrg:true },
   'Convert':              { color:'#5F5E5A', bgColor:'#e8e6e0', growOrg:true },
@@ -80,10 +81,6 @@ function parseHTML(html) {
   const groups = [];
   let grp = null, team = null;
 
-  // Split on h2 and h3 tags to get sections
-  // We'll walk through the HTML looking for headings and tables
-
-  // Extract all sections by splitting on heading tags
   const sectionRe = /<(h[23])[^>]*>([\s\S]*?)<\/h[23]>([\s\S]*?)(?=<h[23]|$)/gi;
   let m;
 
@@ -98,7 +95,6 @@ function parseHTML(html) {
         groups.push(grp);
         team = null;
       }
-      // Extract steering info from body text
       if (grp) {
         const pmM = body.match(/Steering PM[^:]*:\s*<\/strong>\s*([^<|]+)/i) ||
                     body.match(/Steering PM[^:]*:\*\*\s*([^|*\n<]+)/i);
@@ -111,12 +107,10 @@ function parseHTML(html) {
       team = { name: titleRaw, members: [], redistributing: false };
       grp.teams.push(team);
 
-      // Check for redistribution notice
       if (body.toLowerCase().includes('re-distribut') || body.toLowerCase().includes('being redistributed')) {
         team.redistributing = true;
       }
 
-      // Parse all tables in this section's body
       const tableRe = /<table[\s\S]*?<\/table>/gi;
       let tM;
       let foundMemberTable = false;
@@ -126,54 +120,42 @@ function parseHTML(html) {
         const rows = parseTable(tableHTML);
         if (!rows.length) continue;
 
-        // Determine if this is a role table or member table
-        // Role tables have "Role" as first col; member tables have "Name" as first col
-        const firstRow = rows[0];
-        const isRoleTable = firstRow.length >= 2 &&
-          !['michael','jorge','nath','ravi','andrew','maya','crystal','brandyn',
-            'denise','ivana','kevin','tina','jens','ward','gary','mehul'].includes(firstRow[0].toLowerCase().split(' ')[0]);
-
-        // Try to detect role table by checking if values look like role names
         const roleKeywords = ['product manager','program manager','engineering manager','engineering lead',
-          'tech lead','design lead','design','content design','ux research','product owner'];
+          'tech lead','design lead','design','content design','ux research','product owner',
+          'scrum master','qa manager'];
         const looksLikeRoleTable = roleKeywords.some(r => rows.some(row => row[0] && row[0].toLowerCase().includes(r)));
 
         if (looksLikeRoleTable && !foundMemberTable) {
-          // Role assignment table
           for (const row of rows) {
             const role = (row[0] || '').toLowerCase();
             const name = row[1] || '';
             if (!name || name.toLowerCase() === 'name') continue;
 
             if (role.includes('product manager') && !role.includes('program')) team.pm = name;
-            else if (role.includes('program manager'))  team.pgm = name;
-            else if (role === 'engineering manager')     team.em = name;
-            else if (role === 'engineering lead')        team.engLead = name;
-            else if (role === 'tech lead')               team.techLead = name;
+            else if (role.includes('program manager') || role.includes('scrum master')) team.pgm = name;
+            else if (role === 'engineering manager') team.em = name;
+            else if (role === 'engineering lead')    team.engLead = name;
+            else if (role === 'tech lead')           team.techLead = name;
             else if (role.includes('design lead') || role === 'design') team.design = name;
-            else if (role.includes('content design'))    team.content = name;
-            else if (role.includes('ux research'))       team.ux = name;
+            else if (role.includes('content design')) team.content = name;
+            else if (role.includes('ux research'))    team.ux = name;
+            else if (role.includes('qa manager'))     team.qaManager = name;
           }
         } else {
-          // Member table
           foundMemberTable = true;
           for (const row of rows) {
             const rawName = row[0] || '';
             const title   = row[1] || '';
-            const moved   = row[1] || '';
 
             if (!rawName || rawName.toLowerCase() === 'name' || rawName.startsWith('---')) continue;
-
-            // Skip headcount rows
             if (rawName.toLowerCase().includes('headcount')) continue;
 
             const isCtrct = rawName.toUpperCase().includes('CTRCT');
             const cleanName = rawName.replace(/^CTRCT\s*[-–]\s*/i, '').trim();
-
             if (!cleanName) continue;
 
-            if (team.redistributing && moved && moved !== title) {
-              team.members.push({ name: cleanName, title: '', ctrct: false, moved });
+            if (team.redistributing && title && title !== rawName) {
+              team.members.push({ name: cleanName, title: '', ctrct: false, moved: title });
             } else {
               team.members.push({ name: cleanName, title, ctrct: isCtrct });
             }
@@ -209,7 +191,6 @@ async function main() {
     process.exit(1);
   }
 
-  // Build output — inject structured groups directly (no re-parsing needed)
   const tmpl = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
   const injection = `window.__PE_GROUPS__ = ${JSON.stringify(groups)};\nwindow.__PE_META__ = ${JSON.stringify({ updatedAt, version })};`;
   const out = tmpl.replace('/* __INJECT_DATA__ */', injection);
