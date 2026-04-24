@@ -17,13 +17,60 @@
     --text-secondary: #a0a09b; --text-tertiary: #6b6b68;
     --border: rgba(255,255,255,0.1); --border-hover: rgba(255,255,255,0.2); }
 }
-body { font-family: var(--font); background: var(--bg); color: var(--text-primary); padding: 2rem 1.5rem; min-height: 100vh; }
+body { font-family: var(--font); background: var(--bg); color: var(--text-primary); min-height: 100vh; }
+
+/* ── Login screen ─────────────────────────────────────────────────────── */
+#login-screen {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh; padding: 2rem;
+}
+.login-box {
+  background: var(--bg-secondary); border-radius: 16px;
+  padding: 2.5rem 2rem; width: 100%; max-width: 360px;
+  border: 0.5px solid var(--border);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  text-align: center;
+}
+.login-logo {
+  width: 48px; height: 48px; border-radius: 12px;
+  background: #185FA5; display: inline-flex; align-items: center;
+  justify-content: center; margin-bottom: 1.25rem;
+}
+.login-logo svg { width: 26px; height: 26px; fill: white; }
+.login-title { font-size: 18px; font-weight: 600; margin-bottom: 0.35rem; }
+.login-subtitle { font-size: 13px; color: var(--text-secondary); margin-bottom: 1.75rem; }
+.login-input {
+  width: 100%; padding: 10px 14px; font-size: 14px; font-family: var(--font);
+  border: 0.5px solid var(--border-hover); border-radius: var(--radius-md);
+  background: var(--bg); color: var(--text-primary); outline: none;
+  margin-bottom: 0.75rem; letter-spacing: 0.05em;
+}
+.login-input:focus { border-color: #185FA5; box-shadow: 0 0 0 3px rgba(24,95,165,0.12); }
+.login-btn {
+  width: 100%; padding: 10px; font-size: 14px; font-family: var(--font);
+  font-weight: 500; background: #185FA5; color: white; border: none;
+  border-radius: var(--radius-md); cursor: pointer; transition: background 0.15s;
+}
+.login-btn:hover { background: #1452891; }
+.login-btn:active { background: #134a82; }
+.login-error {
+  font-size: 12px; color: #c2410c; margin-top: 0.6rem;
+  display: none; background: #fff7ed; padding: 6px 10px;
+  border-radius: 6px; border: 0.5px solid #fdba74;
+}
+.login-error.show { display: block; }
+.login-hint { font-size: 11px; color: var(--text-tertiary); margin-top: 1.25rem; }
+
+/* ── Main app ─────────────────────────────────────────────────────────── */
+#app { display: none; padding: 2rem 1.5rem; }
 h1 { font-size: 20px; font-weight: 500; margin-bottom: 0.25rem; }
 .subtitle { font-size: 13px; color: var(--text-secondary); margin-bottom: 1.5rem; }
 .top-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 1rem; flex-wrap: wrap; }
 .search-box { flex: 1; min-width: 200px; }
-.search-box input { width: 100%; padding: 7px 12px; font-size: 13px; border: 0.5px solid var(--border-hover); border-radius: var(--radius-md); background: var(--bg); color: var(--text-primary); outline: none; }
+.search-box input { width: 100%; padding: 7px 12px; font-size: 13px; border: 0.5px solid var(--border-hover); border-radius: var(--radius-md); background: var(--bg); color: var(--text-primary); outline: none; font-family: var(--font); }
 .search-box input:focus { border-color: #888; }
+.logout-btn { font-size: 12px; padding: 6px 12px; border-radius: var(--radius-md); border: 0.5px solid var(--border-hover); background: var(--bg-secondary); color: var(--text-secondary); cursor: pointer; font-family: var(--font); }
+.logout-btn:hover { border-color: #888; color: var(--text-primary); }
 .filter-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 1.25rem; }
 .pill { font-size: 12px; padding: 4px 10px; border-radius: 20px; cursor: pointer; border: 0.5px solid var(--border-hover); background: var(--bg-secondary); color: var(--text-secondary); transition: all 0.15s; white-space: nowrap; user-select: none; }
 .pill.active { border-color: transparent; }
@@ -34,6 +81,7 @@ h1 { font-size: 20px; font-weight: 500; margin-bottom: 0.25rem; }
 .pill[data-group="Social Ads"].active { background: #D85A30; color: #FAECE7; }
 .pill[data-group="SEO"].active { background: #993556; color: #FBEAF0; }
 .pill[data-group="Shared Services"].active { background: #BA7517; color: #FAEEDA; }
+.pill[data-group="Thryv Catalyst"].active { background: #7C3AED; color: #EDE9FE; }
 .pill[data-group="DevSecOps"].active { background: #A32D2D; color: #FCEBEB; }
 .pill[data-group="Capture & Engage"].active { background: #3B6D11; color: #EAF3DE; }
 .pill[data-group="Convert"].active { background: #5F5E5A; color: #F1EFE8; }
@@ -87,28 +135,116 @@ h1 { font-size: 20px; font-weight: 500; margin-bottom: 0.25rem; }
 </style>
 </head>
 <body>
-<h1>PE Scrum Team Assignments</h1>
-<p class="subtitle" id="subtitle">Loading…</p>
-<div class="top-bar"><div class="search-box"><input type="text" id="search" placeholder="Search by name, role, or team…" /></div></div>
-<div class="filter-pills" id="filters"></div>
-<div class="stats-row" id="stats"></div>
-<div id="roster"></div>
+
+<!-- ── Login screen ──────────────────────────────────────────────────────── -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+    </div>
+    <div class="login-title">PE Scrum Teams</div>
+    <div class="login-subtitle">Enter the password to access team assignments</div>
+    <input type="password" class="login-input" id="password-input" placeholder="Password" autocomplete="current-password" />
+    <button class="login-btn" id="login-btn">Sign in</button>
+    <div class="login-error" id="login-error">Incorrect password. Please try again.</div>
+    <div class="login-hint">Thryv internal use only</div>
+  </div>
+</div>
+
+<!-- ── Main app ──────────────────────────────────────────────────────────── -->
+<div id="app">
+  <h1>PE Scrum Team Assignments</h1>
+  <p class="subtitle" id="subtitle">Loading…</p>
+  <div class="top-bar">
+    <div class="search-box"><input type="text" id="search" placeholder="Search by name, role, or team…" /></div>
+    <button class="logout-btn" id="logout-btn">Sign out</button>
+  </div>
+  <div class="filter-pills" id="filters"></div>
+  <div class="stats-row" id="stats"></div>
+  <div id="roster"></div>
+</div>
 
 <script>
 /* __INJECT_DATA__ */
 
+// ── Password config ────────────────────────────────────────────────────────
+// Change this to whatever password you want to use
+const PASSWORD = 'Thryv2026!';
+const SESSION_KEY = 'pe_teams_auth';
+
+// ── Auth ───────────────────────────────────────────────────────────────────
+function checkAuth() {
+  return sessionStorage.getItem(SESSION_KEY) === 'true';
+}
+
+function login(pw) {
+  if (pw === PASSWORD) {
+    sessionStorage.setItem(SESSION_KEY, 'true');
+    showApp();
+    return true;
+  }
+  return false;
+}
+
+function logout() {
+  sessionStorage.removeItem(SESSION_KEY);
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('password-input').value = '';
+  document.getElementById('login-error').classList.remove('show');
+}
+
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  initApp();
+}
+
+// Login button
+document.getElementById('login-btn').addEventListener('click', () => {
+  const pw = document.getElementById('password-input').value;
+  if (!login(pw)) {
+    document.getElementById('login-error').classList.add('show');
+    document.getElementById('password-input').value = '';
+    document.getElementById('password-input').focus();
+  }
+});
+
+// Enter key
+document.getElementById('password-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('login-btn').click();
+});
+
+// Logout button
+document.getElementById('logout-btn').addEventListener('click', logout);
+
+// Check if already authenticated this session
+if (checkAuth()) {
+  showApp();
+}
+
+// ── App ────────────────────────────────────────────────────────────────────
 const GROUPS = window.__PE_GROUPS__ || [];
 const META   = window.__PE_META__   || {};
 
-if (!GROUPS.length) {
-  document.getElementById('roster').innerHTML = '<div class="error-box">⚠️ No data loaded. Please re-run the GitHub Actions workflow.</div>';
-} else {
+let activeGroup = 'all', searchTerm = '', appInited = false;
+
+function initApp() {
+  if (appInited) return;
+  appInited = true;
+
+  if (!GROUPS.length) {
+    document.getElementById('roster').innerHTML = '<div class="error-box">⚠️ No data loaded. Please re-run the GitHub Actions workflow.</div>';
+    return;
+  }
+
   const d = new Date(META.updatedAt);
   document.getElementById('subtitle').textContent =
     `Source: Confluence · Last updated ${d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})} at ${d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})} · v${META.version}`;
-}
 
-let activeGroup = 'all', searchTerm = '';
+  document.getElementById('search').addEventListener('input', e => { searchTerm = e.target.value.trim(); render(); });
+  render();
+}
 
 function countMembers(g) { return g.teams.reduce((a,t)=>a+t.members.length,0); }
 function trunc(s,n=20) { return s&&s.length>n?s.slice(0,n-1)+'…':s; }
@@ -200,8 +336,6 @@ function renderRoster() {
 }
 
 function render() { renderFilters(); renderStats(); renderRoster(); }
-document.getElementById('search').addEventListener('input', e => { searchTerm = e.target.value.trim(); render(); });
-render();
 </script>
 </body>
 </html>
